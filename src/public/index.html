@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Inventario</title>
+</head>
+<body>
+
+<h2>Login</h2>
+<input type="text" id="correo" placeholder="Correo">
+<input type="password" id="contrasena" placeholder="Contraseña">
+<button onclick="login()">Login</button>
+
+<hr>
+
+<div id="app" style="display:none;">
+
+    <h2>Inventario</h2>
+
+    <!-- Crear producto (admin) -->
+    <div id="crearProducto">
+        <input type="text" id="nombreProducto" placeholder="Nuevo producto">
+        <button onclick="crearProducto()">Agregar</button>
+    </div>
+
+    <ul id="listaProductos"></ul>
+
+    <!--<hr>-->
+
+    <h2>Entrada (admin)</h2>
+    <input type="number" id="idProductoEntrada" placeholder="ID Producto">
+    <input type="number" id="cantidadEntrada" placeholder="Cantidad">
+    <button onclick="entrada()">Agregar Stock</button>
+    
+    <hr>
+
+    <h2>Salida (almacenista)</h2>
+    <input type="number" id="idProductoSalida" placeholder="ID Producto">
+    <input type="number" id="cantidadSalida" placeholder="Cantidad">
+    <button onclick="salida()">Sacar</button>
+
+    <hr>
+
+    <h2>Histórico</h2>
+    <button onclick="cargarHistorico()">Todos</button>
+    <button onclick="cargarHistorico('entrada')">Entradas</button>
+    <button onclick="cargarHistorico('salida')">Salidas</button>
+
+    <ul id="listaHistorico"></ul>
+
+</div>
+
+<script>
+let usuario = null;
+
+// Login
+async function login() {
+    const correo = document.getElementById('correo').value;
+    const contrasena = document.getElementById('contrasena').value;
+
+    const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ correo, contrasena })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+        usuario = data.usuario;
+        alert(`¡Bienvenido ${usuario.nombre || usuario.correo}!`);
+        document.getElementById('app').style.display = 'block';
+        cargarProductos();
+    } else {
+        alert(data.error);
+    }
+}
+
+// Mostrar los productos para ambos usuarios
+async function cargarProductos() {
+    const res = await fetch(`/productos?idUsuario=${usuario.idUsuario}`);
+    const productos = await res.json();
+
+    const lista = document.getElementById('listaProductos');
+    lista.innerHTML = '';
+
+    productos.forEach(p => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            ${p.idProducto} - ${p.nombre} - Stock: ${p.stock} - ${p.estado}
+            <button onclick="cambiarEstado(${p.idProducto}, '${p.estado}')">Toggle Estado</button>
+        `;
+        lista.appendChild(li);
+    });
+}
+
+// Crear productio (solo el administrador tiene permisos)
+async function crearProducto() {
+    const nombre = document.getElementById('nombreProducto').value;
+
+    const res = await fetch('/productos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, idUsuario: usuario.idUsuario })
+    });
+
+    const data = await res.json();
+    alert(data.message || data.error);
+
+    cargarProductos();
+}
+
+// Cambiar estado del producto (soilo admin tiene permisos)
+async function cambiarEstado(idProducto, estadoActual) {
+    const nuevoEstado = estadoActual === 'activo' ? 'inactivo' : 'activo';
+
+    const res = await fetch('/productos/estado', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            idProducto,
+            estado: nuevoEstado,
+            idUsuario: usuario.idUsuario
+        })
+    });
+
+    const data = await res.json();
+    alert(data.message || data.error);
+
+    cargarProductos();
+}
+
+// Salidas de inventario (solo almacenista)
+async function salida() {
+    const idProducto = document.getElementById('idProductoSalida').value;
+    const cantidad = document.getElementById('cantidadSalida').value;
+
+    const res = await fetch('/productos/salida', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            idProducto,
+            cantidad,
+            idUsuario: usuario.idUsuario
+        })
+    });
+
+    const data = await res.json();
+    alert(data.message || data.error);
+
+    cargarProductos();
+}
+
+// historico (solo puede consultar el admin, el almacenista no podra ver nada)
+async function cargarHistorico(tipo = '') {
+    let url = `/historico?idUsuario=${usuario.idUsuario}`;
+    if (tipo) url += `&tipo=${tipo}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const lista = document.getElementById('listaHistorico');
+    lista.innerHTML = '';
+
+    data.forEach(h => {
+        const li = document.createElement('li');
+        li.textContent = `${h.producto} - ${h.tipo} - ${h.cantidad} - ${h.usuario}`;
+        lista.appendChild(li);
+    });
+}
+
+// Funcion para agregar stock al inventario solo como administrador
+async function entrada() {
+    const idProducto = document.getElementById('idProductoEntrada').value;
+    const cantidad = document.getElementById('cantidadEntrada').value;
+
+    const res = await fetch('/productos/entrada', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            idProducto,
+            cantidad,
+            idUsuario: usuario.idUsuario
+        })
+    });
+
+    const data = await res.json();
+    alert(data.message || data.error);
+
+    cargarProductos();
+}
+</script>
+
+</body>
+</html>
